@@ -1,0 +1,114 @@
+(configure the 3vlans on each on the L2 switch)
+
+vlan 10
+name HR
+vlan 20
+name Sales
+vlan 30
+name Engineering
+
+*****configure switchport trunk on the L2switch ports connecting to the L3 switches***
+switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk allowed vlan 10,20,30
+
+*****configure switchport trunk on the L3 switch ports connecting to L2 switches*********
+#hostname CORE2
+CORE2(config)#int range g1/1, g0/3, g0/1
+CORE2(config-if-range)#switchport trunk encapsulation dot1q
+CORE2(config-if-range)#switchport mode trunk
+CORE2(config-if-range)#switchport trunk allowed vlan 10,20,30 (40,50,60 on the other enterprise network)
+CORE2(config-if-range)#vlan 10
+CORE2(config-vlan)#name HR
+CORE2(config-vlan)#vlan 20
+CORE2(config-vlan)#name Sales
+CORE2(config-vlan)#vlan 30
+CORE2(config-vlan)#name Engineering
+CORE2(config-vlan)#
+
+*****configure SVI for vlan 10,20,30 with their IPs (40,50,60) on the L3 switches******
+int vlan 10
+no switchport
+ip add 10.0.10.1 255.255.255.0
+no shut
+
+*****configure dhcp for vlan 10,20,30 (40,50,60) on the L3 switches******
+ip dhcp pool HR
+default-router 10.0.10.3
+network 10.0.10.0 255.255.255.0
+domain-name 1.1.1.1
+lease 9
+ip dhcp excluded-add 10.0.10.1 10.0.10.5
+
+
+*****configure HSRP for vlan 10,20,30 (on the other network 40,50,60) on the L3 switches******
+int vlan 10
+standby 1 ip 10.0.10.3
+standby version 2
+standby 1 priority 150
+standby 1 preempt
+
+****** for etherchannel next******
+
+int range g1/2-3
+CORE1(config-if-range)#switchport trunk encapsulation dot1q
+CORE1(config-if-range)#switchport mode trunk
+CORE1(config-if-range)#switchport trunk allowed vlan 10,20,30
+CORE1(config-if-range)#channel-group 1 mode active
+Creating a port-channel interface Port-channel 1
+
+********CONFIGURE LINK BETWEEN FORTIGATE AND L3SWITCHES************
+
+int g0/0
+no switchport
+ip add 172.16.10.2 255.255.255.252
+no shut
+(configure the interface on the fortigate GUI)
+(Configure a default route using fortigate ip as the next hop 172.16.10.1)
+
+********On the fortigate GUI****
+configure the interfaces
+configures a default static route using 203.100.100.1/2 as the destination which is the next hop
+configure a static route to the Lan ip using /19 subnet to calculate the vlans
+configure a firewall policy for lan-wan 
+and then WAN-LAN and take note of the administrative distance because the firewall uses port 1 already as its gateway so use the cli to check routing table to know the gateway
+ get route info routing-table all
+
+****on the Wan switch*******
+configure 2vlans for the 2 ISPs to differentiate then
+vlan 10
+name mainone
+int g0/0
+switchport mode access
+switchport access vlan 10
+(do same with vlan 20 for StarLink using switchport for its interface)
+
+
+***** on the ISP Routers******
+configure the interfaces between fortigate link and then the interface to the internet
+configure bgp to advertise the asn
+MainOne(config)#router bgp 205
+MainOne(config-router)#neighbor 205.100.100.2 remote
+MainOne(config-router)#neighbor 205.100.100.2 remote-as 209
+MainOne(config-router)#network 207.100.100.0 ?
+  backdoor   Specify a BGP backdoor route
+  mask       Network mask
+  route-map  Route-map to modify the attributes
+  <cr>
+
+MainOne(config-router)#network 207.100.100.0 mask ?
+  A.B.C.D  Network mask
+
+MainOne(config-router)#network 207.100.100.0 mask 255.255.255.252
+MainOne(config-router)#network 203.100.100.0 mask 255.255.255.252
+MainOne(config-router)#do wri
+Building configuration...
+[OK]
+MainOne(config-router)#
+
+(do same for the rest of the ASN to learn their network)
+
+
+
+
+
